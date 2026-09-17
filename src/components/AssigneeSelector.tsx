@@ -132,9 +132,13 @@ export default function AssigneeSelector({
               alt={currentAssignee.name}
               className="w-7 h-7 rounded-md object-cover flex-shrink-0 shadow-2xs"
             />
-          ) : (
+          ) : currentAssignee ? (
             <div className="w-7 h-7 rounded-md bg-[#DCE9FF] text-[#0051D5] flex items-center justify-center font-bold text-[11px] flex-shrink-0 shadow-2xs">
-              {currentAssignee ? getInitials(currentAssignee.name) : 'NA'}
+              {getInitials(currentAssignee.name)}
+            </div>
+          ) : (
+            <div className="w-7 h-7 rounded-md bg-slate-100 text-slate-400 flex items-center justify-center font-bold text-[12px] flex-shrink-0 shadow-2xs">
+              —
             </div>
           )}
 

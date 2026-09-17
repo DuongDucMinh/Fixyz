@@ -53,6 +53,40 @@ assert(updatedTopics !== null && updatedTopics.length === 3, 'Can create topic w
 assert(updatedTopics[2].name === 'Fix Payment Gateway', 'Topic name is properly sanitized');
 assert(addTopic(mockTopics, '   ') === null, 'Empty or whitespace topic name is safely rejected');
 
+// Test Delete Topic & Safeguards
+function deleteTopicLogic(topicsList, bugsList, activeTopic, topicIdToDelete) {
+  if (topicsList.length <= 1) {
+    return { error: 'CANNOT_DELETE_LAST_TOPIC', topics: topicsList, bugs: bugsList, activeTopic };
+  }
+  const remainingTopics = topicsList.filter((t) => t.id !== topicIdToDelete);
+  const remainingBugs = bugsList.filter((b) => b.topicId !== topicIdToDelete);
+  const nextActive = activeTopic === topicIdToDelete ? (remainingTopics[0]?.id || '') : activeTopic;
+  return { topics: remainingTopics, bugs: remainingBugs, activeTopic: nextActive };
+}
+
+const testBugsForTopic = [
+  { id: 'b-1', topicId: 'topic-1', description: 'Bug in topic 1' },
+  { id: 'b-2', topicId: 'topic-2', description: 'Bug in topic 2' },
+];
+
+const delResult = deleteTopicLogic(updatedTopics, testBugsForTopic, 'topic-1', 'topic-1');
+assert(delResult.topics.length === 2, 'Deleting topic removes it from list');
+assert(delResult.activeTopic === 'topic-2', 'Deleting active topic automatically redirects to next available topic');
+assert(delResult.bugs.length === 1 && delResult.bugs[0].id === 'b-2', 'Deleting topic cascades and cleans up all its associated bugs');
+
+const guardedResult = deleteTopicLogic([{ id: 'single-topic', name: 'Only Topic' }], [], 'single-topic', 'single-topic');
+assert(guardedResult.error === 'CANNOT_DELETE_LAST_TOPIC', 'Safety guard prevents deleting the only remaining topic');
+
+// Test Type-to-Confirm validation logic
+function validateDeleteConfirmation(inputName, topicName) {
+  return inputName.trim() === topicName.trim();
+}
+assert(validateDeleteConfirmation('Fix Video', 'Fix Video') === true, 'Matching topic name enables delete action');
+assert(validateDeleteConfirmation('  Fix Video  ', 'Fix Video') === true, 'Whitespace-trimmed topic name enables delete action');
+assert(validateDeleteConfirmation('fix video', 'Fix Video') === false, 'Mismatched case prevents accidental deletion');
+assert(validateDeleteConfirmation('', 'Fix Video') === false, 'Empty input prevents accidental deletion');
+
+
 // -------------------------------------------------------------
 // SCENARIO 2: Bug CRUD & Image Lifecycle
 // -------------------------------------------------------------
@@ -116,6 +150,23 @@ function sanitizeAssigneeForDb(assigneeId, availableAssignees) {
 assert(sanitizeAssigneeForDb('assignee-1', mockAssignees) === 'assignee-1', 'Valid assignee ID is preserved');
 assert(sanitizeAssigneeForDb('', mockAssignees) === null, 'Empty assignee ID safely maps to null (unassigned)');
 assert(sanitizeAssigneeForDb('non-existent-uuid', mockAssignees) === null, 'Ghost/deleted assignee ID safely maps to null, preventing Postgres FK constraint violations');
+
+// Test Avatar rendering logic for unassigned vs assigned
+function getAssigneeAvatarDisplay(assignee) {
+  if (assignee?.avatar) return { type: 'image', src: assignee.avatar };
+  if (assignee) {
+    const parts = assignee.name.trim().split(' ');
+    const initials = parts.length === 1 ? parts[0].substring(0, 2).toUpperCase() : (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return { type: 'initials', text: initials };
+  }
+  return { type: 'unassigned_dash', text: '—' };
+}
+
+assert(getAssigneeAvatarDisplay(null).text === '—', 'Unassigned assignee returns dash "—"');
+assert(getAssigneeAvatarDisplay(null).text !== 'NA', 'Unassigned assignee does NOT return misleading "NA" abbreviation');
+assert(getAssigneeAvatarDisplay({ name: 'Nguyễn Văn A' }).text === 'NA', 'Real user "Nguyễn Văn A" receives initials "NA"');
+assert(getAssigneeAvatarDisplay({ name: 'Đức Minh' }).text === 'ĐM', 'Real user "Đức Minh" receives initials "ĐM"');
+
 
 // Test Assignee Deletion cascade to bugs
 function deleteAssigneeWithCascade(assigneeIdToDelete, currentAssignees, currentBugs) {

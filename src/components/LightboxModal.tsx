@@ -65,6 +65,8 @@ export default function LightboxModal({
 
   const modalContent = (
     <div
+      data-fixyz-modal="true"
+      data-modal-type="lightbox"
       className="fixed inset-0 top-0 left-0 right-0 bottom-0 m-0 z-[9999] flex flex-col items-center justify-between bg-black/90 backdrop-blur-md select-none overflow-hidden"
       style={{ margin: 0, top: 0, left: 0, right: 0, bottom: 0 }}
       onClick={() => {

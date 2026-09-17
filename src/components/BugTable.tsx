@@ -64,8 +64,14 @@ export default function BugTable() {
   return (
     <>
       <div className="bg-white rounded-xl shadow-xs border border-slate-200/80 overflow-hidden">
+        {/* Mobile Swipe Hint */}
+        <div className="md:hidden px-3 py-1.5 bg-[#EFF4FF]/60 border-b border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+          <span>👉 Vuốt ngang bảng để xem đầy đủ các cột</span>
+          <span className="font-mono text-[10px] text-slate-400">{activeBugs.length} dòng</span>
+        </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse table-fixed min-w-[900px]">
+          <table className="w-full text-left border-collapse table-fixed min-w-[860px]">
             <thead>
               <tr className="bg-[#EFF4FF]/70 border-b border-slate-200/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 <th scope="col" className="py-3 px-3 text-center w-[54px]">
@@ -133,13 +139,18 @@ export default function BugTable() {
                       <p className="text-sm font-medium text-slate-600">
                         Chưa có lỗi nào trong danh sách này
                       </p>
-                      <button
-                        onClick={addBug}
-                        className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Thêm lỗi đầu tiên</span>
-                      </button>
+                      <div className="flex flex-col sm:flex-row items-center gap-2">
+                        <button
+                          onClick={addBug}
+                          className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Thêm lỗi đầu tiên</span>
+                        </button>
+                        <span className="text-xs text-slate-400">
+                          hoặc ấn <kbd className="font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 text-[11px]">Ctrl + V</kbd> dán ảnh trực tiếp
+                        </span>
+                      </div>
                     </div>
                   </td>
                 </tr>

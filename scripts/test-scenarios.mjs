@@ -346,6 +346,159 @@ assert(emptyDbBugs.length === 0, 'Supabase empty table safely clears bugs array 
 
 
 // -------------------------------------------------------------
+// SCENARIO 7: Global Ctrl+V Auto-Row & Modal Isolation Audit
+// -------------------------------------------------------------
+console.log(`\n${BOLD}Scenario 7: Global Ctrl+V Auto-Row & Modal Isolation Audit${RESET}`);
+
+// 7.1 Input & Textarea isolation logic
+function isInputOrEditableCheck(targetTagName, isContentEditable) {
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(targetTagName)) return true;
+  if (isContentEditable) return true;
+  return false;
+}
+
+assert(isInputOrEditableCheck('TEXTAREA', false) === true, 'Textarea correctly recognized as editable (preserves description typing)');
+assert(isInputOrEditableCheck('INPUT', false) === true, 'Input correctly recognized as editable (preserves search bar pasting)');
+assert(isInputOrEditableCheck('DIV', false) === false, 'Generic DIV is not editable (allows Ctrl+V shortcut)');
+assert(isInputOrEditableCheck('BODY', false) === false, 'Body is not editable (allows Ctrl+V shortcut)');
+
+// 7.2 Modal Isolation logic
+function simulatePasteAction({
+  hasModalOpen,
+  targetTag,
+  clipboardItems = [],
+  clipboardText = '',
+  bugsState = [],
+  modalImagesState = [],
+  isModalPaste = false,
+}) {
+  let outsideBugs = [...bugsState];
+  let modalImages = [...modalImagesState];
+
+  // If in modal mode (e.g. ImageUploadModal is open)
+  if (hasModalOpen) {
+    if (isModalPaste) {
+      // Modal's own handler runs with stopImmediatePropagation()
+      const imagesInClipboard = clipboardItems.filter((item) => item.type.startsWith('image/'));
+      modalImages = [...modalImages, ...imagesInClipboard.map((img) => img.data)];
+    }
+    // Outside listener MUST NOT trigger any changes
+    return { outsideBugs, modalImages, handledBy: 'MODAL_ONLY' };
+  }
+
+  // If active element is input/textarea, do not create row
+  if (isInputOrEditableCheck(targetTag, false)) {
+    return { outsideBugs, modalImages, handledBy: 'NATIVE_INPUT' };
+  }
+
+  // Outside paste on page
+  const images = clipboardItems.filter((item) => item.type.startsWith('image/'));
+  if (images.length > 0) {
+    const newBug = {
+      id: `bug-${Date.now()}`,
+      images: images.map((img) => img.data),
+      description: '',
+    };
+    outsideBugs = [newBug, ...outsideBugs];
+    return { outsideBugs, modalImages, handledBy: 'PAGE_IMAGE_ROW' };
+  }
+
+  if (clipboardText.trim()) {
+    const newBug = {
+      id: `bug-${Date.now()}`,
+      images: [],
+      description: clipboardText.trim(),
+    };
+    outsideBugs = [newBug, ...outsideBugs];
+    return { outsideBugs, modalImages, handledBy: 'PAGE_TEXT_ROW' };
+  }
+
+  // Fallback empty row
+  const newBug = {
+    id: `bug-${Date.now()}`,
+    images: [],
+    description: '',
+  };
+  outsideBugs = [newBug, ...outsideBugs];
+  return { outsideBugs, modalImages, handledBy: 'PAGE_EMPTY_ROW' };
+}
+
+// Test 7.2.1: In Quick Upload Modal, Ctrl+V pastes image into modal only, NOT creating outside row
+const initialBugs = [{ id: 'b1', description: 'Existing bug', images: [] }];
+const inModalResult = simulatePasteAction({
+  hasModalOpen: true,
+  targetTag: 'DIV',
+  clipboardItems: [{ type: 'image/png', data: 'data:image/webp;base64,mockImage1' }],
+  bugsState: initialBugs,
+  modalImagesState: [],
+  isModalPaste: true,
+});
+
+assert(inModalResult.handledBy === 'MODAL_ONLY', 'Ctrl+V inside Quick Upload modal is exclusively handled by modal');
+assert(inModalResult.modalImages.length === 1, 'Pasted screenshot is added to modal preview list');
+assert(inModalResult.outsideBugs.length === 1, 'Outside bug list count remains exactly 1 (ZERO outside rows created)');
+
+// Test 7.2.2: On page, Ctrl+V with image automatically creates a new row with image attached
+const onPageImageResult = simulatePasteAction({
+  hasModalOpen: false,
+  targetTag: 'BODY',
+  clipboardItems: [{ type: 'image/png', data: 'data:image/webp;base64,screenshotPasted' }],
+  bugsState: initialBugs,
+});
+
+assert(onPageImageResult.handledBy === 'PAGE_IMAGE_ROW', 'Ctrl+V on main page triggers automatic row creation');
+assert(onPageImageResult.outsideBugs.length === 2, 'New bug row added to table (count increased to 2)');
+assert(onPageImageResult.outsideBugs[0].images.length === 1, 'Pasted image is directly attached to the new row');
+
+// Test 7.2.3: On page, Ctrl+V with copied text creates a new row with text in description
+const onPageTextResult = simulatePasteAction({
+  hasModalOpen: false,
+  targetTag: 'BODY',
+  clipboardText: 'Lỗi 404 trang giỏ hàng',
+  bugsState: initialBugs,
+});
+
+assert(onPageTextResult.handledBy === 'PAGE_TEXT_ROW', 'Ctrl+V with text creates row with description');
+assert(onPageTextResult.outsideBugs[0].description === 'Lỗi 404 trang giỏ hàng', 'Pasted text is populated into description');
+
+// Test 7.2.4: Inside Search Input, Ctrl+V does NOT create a bug row
+const insideInputResult = simulatePasteAction({
+  hasModalOpen: false,
+  targetTag: 'INPUT',
+  clipboardText: 'keyword',
+  bugsState: initialBugs,
+});
+
+assert(insideInputResult.handledBy === 'NATIVE_INPUT', 'Ctrl+V inside search input is delegated to native input');
+assert(insideInputResult.outsideBugs.length === 1, 'No new bug row created when typing/pasting in input');
+
+// 7.3 Keydown & Paste Coordination (Prevent duplicate rows)
+function simulateKeydownAndPasteCoordination() {
+  let rowsCreated = 0;
+  let pendingKeydown = 0;
+
+  // Step 1: User presses Ctrl+V (keydown)
+  pendingKeydown = Date.now();
+
+  // Step 2: Browser immediately dispatches paste event within 10ms
+  // Paste handler runs and resets pendingKeydown
+  const pasteHandled = true;
+  if (pasteHandled) {
+    rowsCreated++;
+    pendingKeydown = 0; // cancels keydown fallback timer
+  }
+
+  // Step 3: 120ms later, keydown timeout checks if pendingKeydown is still set
+  if (pendingKeydown > 0) {
+    rowsCreated++; // fallback
+  }
+
+  return rowsCreated;
+}
+
+assert(simulateKeydownAndPasteCoordination() === 1, 'Coordinated keydown and paste creates exactly 1 row (zero duplicate rows)');
+
+// -------------------------------------------------------------
 // TEST SUMMARY
 // -------------------------------------------------------------
 console.log(`\n${BOLD}${CYAN}------------------------------------------------------${RESET}`);

@@ -130,6 +130,7 @@ export default function BugRow({
         <textarea
           ref={textareaRef}
           rows={1}
+          data-bug-textarea={bug.id}
           value={description}
           onChange={(e) => {
             setDescription(e.target.value);

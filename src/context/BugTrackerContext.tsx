@@ -32,6 +32,13 @@ interface BugTrackerContextType {
     pendingCount: number;
     completedCount: number;
   };
+  isSidebarOpen: boolean;
+  setIsSidebarOpen: (open: boolean) => void;
+  isDesktopCollapsed: boolean;
+  setIsDesktopCollapsed: (collapsed: boolean | ((prev: boolean) => boolean)) => void;
+  toggleSidebar: () => void;
+  closeSidebar: () => void;
+  openSidebar: () => void;
   isLoaded: boolean;
   isConnectedToSupabase: boolean;
   refreshFromSupabase: () => Promise<void>;
@@ -58,6 +65,41 @@ export function BugTrackerProvider({ children }: { children: React.ReactNode }) 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPriority, setSelectedPriority] = useState<string>('all');
   const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>('all');
+
+  // Responsive Sidebar States
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+  const [isDesktopCollapsed, setIsDesktopCollapsed] = useState<boolean>(false);
+
+  const toggleSidebar = useCallback(() => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+      setIsDesktopCollapsed((prev) => !prev);
+    } else {
+      setIsSidebarOpen((prev) => !prev);
+    }
+  }, []);
+
+  const closeSidebar = useCallback(() => {
+    setIsSidebarOpen(false);
+  }, []);
+
+  const openSidebar = useCallback(() => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+      setIsDesktopCollapsed(false);
+    } else {
+      setIsSidebarOpen(true);
+    }
+  }, []);
+
+  // Automatically close mobile drawer when window resized to desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setIsSidebarOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Function to load latest data from Supabase
   const refreshFromSupabase = useCallback(async () => {
@@ -609,6 +651,13 @@ export function BugTrackerProvider({ children }: { children: React.ReactNode }) 
         selectedAssigneeId,
         setSelectedAssigneeId,
         stats,
+        isSidebarOpen,
+        setIsSidebarOpen,
+        isDesktopCollapsed,
+        setIsDesktopCollapsed,
+        toggleSidebar,
+        closeSidebar,
+        openSidebar,
         isLoaded,
         isConnectedToSupabase,
         refreshFromSupabase,

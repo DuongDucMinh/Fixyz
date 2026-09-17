@@ -4,10 +4,22 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useBugTracker } from '@/context/BugTrackerContext';
 import { useMounted } from '@/hooks/useMounted';
-import { Layers, Plus, X, FolderCheck, Trash2, AlertTriangle } from 'lucide-react';
+import { Layers, Plus, X, FolderCheck, Trash2, AlertTriangle, Menu, ChevronLeft } from 'lucide-react';
 
 export default function Sidebar() {
-  const { topics, activeTopicId, setActiveTopicId, addTopic, deleteTopic, bugs, isLoaded } = useBugTracker();
+  const {
+    topics,
+    activeTopicId,
+    setActiveTopicId,
+    addTopic,
+    deleteTopic,
+    bugs,
+    isLoaded,
+    isSidebarOpen,
+    closeSidebar,
+    toggleSidebar,
+    isDesktopCollapsed,
+  } = useBugTracker();
   const mounted = useMounted();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newTopicName, setNewTopicName] = useState('');
@@ -40,6 +52,7 @@ export default function Sidebar() {
     addTopic(newTopicName.trim());
     setNewTopicName('');
     setIsAddModalOpen(false);
+    closeSidebar();
   };
 
   const handleOpenDeleteModal = (topic: (typeof topics)[0]) => {
@@ -74,15 +87,67 @@ export default function Sidebar() {
 
   return (
     <>
-      <aside className="w-60 bg-white border-r border-slate-200/80 flex flex-col h-screen sticky top-0 flex-shrink-0 select-none">
-        {/* Logo and Brand */}
-        <div className="h-16 px-5 border-b border-slate-200/60 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#0051D5] flex items-center justify-center text-white font-black text-base shadow-sm">
-            F
+      {/* Mobile Backdrop Overlay */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40 md:hidden transition-opacity"
+          onClick={closeSidebar}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Desktop Reopen Button when Sidebar is Collapsed - Positioned at Screen Edge (mép màn hình) */}
+      {isDesktopCollapsed && (
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          className="hidden md:flex fixed top-3.5 left-4 z-40 p-2 bg-white hover:bg-slate-50 text-slate-700 hover:text-[#0051D5] rounded-lg border border-slate-200/90 shadow-xs hover:shadow-md transition-all cursor-pointer items-center justify-center group"
+          title="Mở sidebar"
+          aria-label="Mở sidebar"
+        >
+          <Menu className="w-5 h-5 text-slate-600 group-hover:text-[#0051D5]" />
+        </button>
+      )}
+
+      {/* Sidebar Aside */}
+      <aside
+        className={`
+          fixed md:sticky top-0 left-0 h-[100dvh] md:h-screen z-50 md:z-auto
+          bg-white border-r border-slate-200/80 flex flex-col flex-shrink-0 select-none
+          transition-all duration-300 ease-in-out
+          ${
+            isSidebarOpen
+              ? 'translate-x-0 w-72 max-w-[85vw] shadow-2xl md:shadow-none'
+              : '-translate-x-full md:translate-x-0'
+          }
+          ${
+            isDesktopCollapsed
+              ? 'md:w-0 md:opacity-0 md:border-r-0 md:overflow-hidden md:pointer-events-none'
+              : 'md:w-60 md:opacity-100'
+          }
+        `}
+      >
+        {/* Logo and Brand Header with Left Arrow Collapse Button on the right */}
+        <div className="h-16 px-4 border-b border-slate-200/60 flex items-center justify-between gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-[#0051D5] flex items-center justify-center text-white font-black text-base shadow-sm flex-shrink-0">
+              F
+            </div>
+            <span className="text-xl font-bold tracking-tight text-slate-900 truncate">
+              Fixyz
+            </span>
           </div>
-          <span className="text-xl font-bold tracking-tight text-slate-900">
-            Fixyz
-          </span>
+
+          {/* Left Arrow Button to close/collapse sidebar */}
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer flex-shrink-0"
+            title="Đóng / Thu gọn sidebar"
+            aria-label="Đóng hoặc thu gọn sidebar"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Topics Section */}
@@ -115,7 +180,10 @@ export default function Sidebar() {
                   >
                     <button
                       type="button"
-                      onClick={() => setActiveTopicId(topic.id)}
+                      onClick={() => {
+                        setActiveTopicId(topic.id);
+                        closeSidebar();
+                      }}
                       className="flex-1 flex items-center gap-2.5 px-3 py-2 text-sm text-left cursor-pointer min-w-0"
                     >
                       <Layers
@@ -171,6 +239,8 @@ export default function Sidebar() {
       {/* Add Topic Dialog */}
       {isAddModalOpen && mounted && createPortal(
         <div
+          data-fixyz-modal="true"
+          data-modal-type="add-topic"
           className="fixed inset-0 top-0 left-0 right-0 bottom-0 m-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 select-none overflow-hidden"
           style={{ margin: 0, top: 0, left: 0, right: 0, bottom: 0 }}
           onClick={() => setIsAddModalOpen(false)}
@@ -234,6 +304,8 @@ export default function Sidebar() {
       {/* Delete Topic Safety Confirmation Modal (Type-to-Confirm) */}
       {topicToDelete && mounted && createPortal(
         <div
+          data-fixyz-modal="true"
+          data-modal-type="delete-topic"
           className="fixed inset-0 top-0 left-0 right-0 bottom-0 m-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 select-none overflow-hidden"
           style={{ margin: 0, top: 0, left: 0, right: 0, bottom: 0 }}
           onClick={handleCloseDeleteModal}

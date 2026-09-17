@@ -55,11 +55,15 @@ export default function ImageUploadModal({
     }
   }, []);
 
-  // Listen to Paste Event (Ctrl + V)
+  // Listen to Paste Event (Ctrl + V) with absolute isolation
   useEffect(() => {
     if (!isOpen) return;
 
     const handlePaste = (e: ClipboardEvent) => {
+      // In modal mode, always stop propagation so no outside listeners are triggered!
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
       const clipboardData = e.clipboardData;
       if (!clipboardData) return;
 
@@ -70,7 +74,6 @@ export default function ImageUploadModal({
         const item = items[i];
         if (item.kind === 'file' && item.type.startsWith('image/')) {
           e.preventDefault();
-          e.stopPropagation();
           const file = item.getAsFile();
           if (file) {
             filesToProcess.push(file);
@@ -85,8 +88,22 @@ export default function ImageUploadModal({
       }
     };
 
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+        // Prevent keydown Ctrl+V from triggering outside listeners while modal is active
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      }
+    };
+
+    // Use capture phase (true) to intercept before any bubbling or other window listeners
+    window.addEventListener('paste', handlePaste, true);
+    window.addEventListener('keydown', handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener('paste', handlePaste, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
   }, [isOpen, processFiles]);
 
   // Drag & drop handlers
@@ -129,6 +146,8 @@ export default function ImageUploadModal({
 
   const modalContent = (
     <div
+      data-fixyz-modal="true"
+      data-modal-type="image-upload"
       className="fixed inset-0 top-0 left-0 right-0 bottom-0 m-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 select-none overflow-hidden"
       style={{ margin: 0, top: 0, left: 0, right: 0, bottom: 0 }}
       onClick={onClose}

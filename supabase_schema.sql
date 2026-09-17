@@ -79,3 +79,38 @@ INSERT INTO public.bugs (id, topic_id, images, description, priority, assignee_i
     ('bug-5', 'topic-1', '[]'::JSONB, 'Tải file PDF chứng chỉ hoàn thành bị mất watermark và font tiếng Việt có dấu bị vỡ ký tự Unicode trong tên học viên.', 'Trung bình', 'assignee-2', FALSE),
     ('bug-6', 'topic-2', '["https://images.unsplash.com/photo-1536240478700-b869070f9279?w=600&auto=format&fit=crop&q=80"]'::JSONB, 'Player không tự động giảm độ phân giải xuống 720p khi băng thông yếu dưới 2Mbps.', 'Trung bình', 'assignee-1', FALSE)
 ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- 8. KÍCH HOẠT SUPABASE REALTIME (Đồng bộ tức thì như Google Docs)
+-- Copy và chạy đoạn này trong SQL Editor trên Supabase Dashboard để kích hoạt live sync
+-- ============================================================
+DO $$
+BEGIN
+  -- Thêm các bảng vào publication supabase_realtime nếu chưa có
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'topics'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.topics;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'assignees'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.assignees;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'bugs'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.bugs;
+  END IF;
+END $$;
+
+-- Đảm bảo khi UPDATE hoặc DELETE gửi đầy đủ thông tin hàng cũ/mới
+ALTER TABLE public.topics REPLICA IDENTITY FULL;
+ALTER TABLE public.assignees REPLICA IDENTITY FULL;
+ALTER TABLE public.bugs REPLICA IDENTITY FULL;
+

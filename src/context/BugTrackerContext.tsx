@@ -11,6 +11,7 @@ interface BugTrackerContextType {
   activeTopicId: string;
   setActiveTopicId: (id: string) => void;
   addTopic: (name: string) => Topic;
+  deleteTopic: (id: string) => Promise<void>;
   assignees: Assignee[];
   addAssignee: (name: string) => Assignee;
   deleteAssignee: (id: string) => void;
@@ -183,8 +184,147 @@ export function BugTrackerProvider({ children }: { children: React.ReactNode }) 
     }
 
     init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshFromSupabase]);
+
+  // Supabase Realtime Subscription (Live sync across all clients like Google Docs)
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    console.log('[Fixyz Realtime] Setting up live sync subscription...');
+
+    const channel = supabase
+      .channel('fixyz-live-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'bugs' },
+        (payload) => {
+          console.log('[Fixyz Realtime] bugs event:', payload.eventType);
+          if (payload.eventType === 'INSERT') {
+            const newRow = payload.new as unknown as SupabaseBugRow;
+            const incomingBug: Bug = {
+              id: newRow.id,
+              topicId: newRow.topic_id,
+              images: Array.isArray(newRow.images) ? newRow.images : [],
+              description: newRow.description || '',
+              priority: (newRow.priority as Priority) || 'Trung bình',
+              assigneeId: newRow.assignee_id || '',
+              isCompleted: Boolean(newRow.is_completed),
+              createdAt: newRow.created_at,
+            };
+            setBugs((prev) => {
+              if (prev.some((b) => b.id === incomingBug.id)) {
+                return prev.map((b) => (b.id === incomingBug.id ? incomingBug : b));
+              }
+              return [incomingBug, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedRow = payload.new as unknown as SupabaseBugRow;
+            setBugs((prev) =>
+              prev.map((b) => {
+                if (b.id !== updatedRow.id) return b;
+                return {
+                  ...b,
+                  topicId: updatedRow.topic_id ?? b.topicId,
+                  images: Array.isArray(updatedRow.images) ? updatedRow.images : b.images,
+                  description: updatedRow.description ?? b.description,
+                  priority: (updatedRow.priority as Priority) ?? b.priority,
+                  assigneeId: updatedRow.assignee_id ?? '',
+                  isCompleted:
+                    updatedRow.is_completed !== undefined
+                      ? Boolean(updatedRow.is_completed)
+                      : b.isCompleted,
+                };
+              })
+            );
+          } else if (payload.eventType === 'DELETE') {
+            const oldId = (payload.old as { id?: string })?.id;
+            if (oldId) {
+              setBugs((prev) => prev.filter((b) => b.id !== oldId));
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'topics' },
+        (payload) => {
+          console.log('[Fixyz Realtime] topics event:', payload.eventType);
+          if (payload.eventType === 'INSERT') {
+            const newRow = payload.new as unknown as SupabaseTopicRow;
+            const incomingTopic: Topic = {
+              id: newRow.id,
+              name: newRow.name,
+              createdAt: newRow.created_at,
+            };
+            setTopics((prev) => {
+              if (prev.some((t) => t.id === incomingTopic.id)) return prev;
+              return [...prev, incomingTopic];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedRow = payload.new as unknown as SupabaseTopicRow;
+            setTopics((prev) =>
+              prev.map((t) => (t.id === updatedRow.id ? { ...t, name: updatedRow.name } : t))
+            );
+          } else if (payload.eventType === 'DELETE') {
+            const oldId = (payload.old as { id?: string })?.id;
+            if (oldId) {
+              setTopics((prev) => {
+                const remaining = prev.filter((t) => t.id !== oldId);
+                setActiveTopicId((currentActive) => {
+                  if (currentActive === oldId) {
+                    return remaining.length > 0 ? remaining[0].id : '';
+                  }
+                  return currentActive;
+                });
+                return remaining;
+              });
+              setBugs((prev) => prev.filter((b) => b.topicId !== oldId));
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'assignees' },
+        (payload) => {
+          console.log('[Fixyz Realtime] assignees event:', payload.eventType);
+          if (payload.eventType === 'INSERT') {
+            const newRow = payload.new as unknown as SupabaseAssigneeRow;
+            const incomingAssignee: Assignee = {
+              id: newRow.id,
+              name: newRow.name,
+              avatar: newRow.avatar || '',
+            };
+            setAssignees((prev) => {
+              if (prev.some((a) => a.id === incomingAssignee.id)) return prev;
+              return [...prev, incomingAssignee];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedRow = payload.new as unknown as SupabaseAssigneeRow;
+            setAssignees((prev) =>
+              prev.map((a) =>
+                a.id === updatedRow.id
+                  ? { ...a, name: updatedRow.name, avatar: updatedRow.avatar || '' }
+                  : a
+              )
+            );
+          } else if (payload.eventType === 'DELETE') {
+            const oldId = (payload.old as { id?: string })?.id;
+            if (oldId) {
+              setAssignees((prev) => prev.filter((a) => a.id !== oldId));
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Fixyz Realtime] Channel status:', status);
+      });
+
+    return () => {
+      console.log('[Fixyz Realtime] Unsubscribing channel...');
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
 
   // Save to localStorage as local cache
@@ -225,6 +365,29 @@ export function BugTrackerProvider({ children }: { children: React.ReactNode }) 
     }
 
     return newTopic;
+  };
+
+  // Delete topic
+  const deleteTopic = async (id: string) => {
+    const remainingTopics = topics.filter((t) => t.id !== id);
+    setTopics(remainingTopics);
+
+    if (activeTopicId === id) {
+      setActiveTopicId(remainingTopics.length > 0 ? remainingTopics[0].id : '');
+    }
+
+    setBugs((prev) => prev.filter((b) => b.topicId !== id));
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('bugs').delete().eq('topic_id', id);
+        const { error } = await supabase.from('topics').delete().eq('id', id);
+        if (error) console.error('[Supabase deleteTopic error]:', error.message);
+        else console.log('[Supabase deleteTopic success]:', id);
+      } catch (err) {
+        console.error('[Supabase deleteTopic exception]:', err);
+      }
+    }
   };
 
   // Add assignee
@@ -428,6 +591,7 @@ export function BugTrackerProvider({ children }: { children: React.ReactNode }) 
         activeTopicId,
         setActiveTopicId,
         addTopic,
+        deleteTopic,
         assignees,
         addAssignee,
         deleteAssignee,

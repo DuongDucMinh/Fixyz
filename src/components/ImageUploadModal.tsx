@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, UploadCloud, ImagePlus, Trash2, ClipboardCheck, Sparkles } from 'lucide-react';
+import { X, UploadCloud, ImagePlus, Trash2, ClipboardCheck, Sparkles, Loader2 } from 'lucide-react';
 
 import { useMounted } from '@/hooks/useMounted';
+import { compressImageFile } from '@/lib/imageCompressor';
 
 interface ImageUploadModalProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export default function ImageUploadModal({
   const [prevInitial, setPrevInitial] = useState(initialImages);
   const [isDragging, setIsDragging] = useState(false);
   const [pasteNotice, setPasteNotice] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync state with prop during render if initialImages changes
@@ -35,19 +37,22 @@ export default function ImageUploadModal({
   }
 
 
-  // Handle file list conversion to base64 Data URLs
-  const processFiles = useCallback((files: FileList | File[]) => {
-    Array.from(files).forEach((file) => {
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          if (e.target?.result && typeof e.target.result === 'string') {
-            setImages((prev) => [...prev, e.target!.result as string]);
-          }
-        };
-        reader.readAsDataURL(file);
-      }
-    });
+  // Handle file list conversion with client-side compression
+  const processFiles = useCallback(async (files: FileList | File[]) => {
+    const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+
+    setIsCompressing(true);
+    try {
+      const compressedResults = await Promise.all(
+        imageFiles.map((file) => compressImageFile(file))
+      );
+      setImages((prev) => [...prev, ...compressedResults]);
+    } catch (err) {
+      console.error('[ImageUploadModal] Image compression error:', err);
+    } finally {
+      setIsCompressing(false);
+    }
   }, []);
 
   // Listen to Paste Event (Ctrl + V)
@@ -59,7 +64,7 @@ export default function ImageUploadModal({
       if (!clipboardData) return;
 
       const items = clipboardData.items;
-      let pastedAny = false;
+      const filesToProcess: File[] = [];
 
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
@@ -68,27 +73,21 @@ export default function ImageUploadModal({
           e.stopPropagation();
           const file = item.getAsFile();
           if (file) {
-            pastedAny = true;
-            const reader = new FileReader();
-            reader.onload = (evt) => {
-              if (evt.target?.result && typeof evt.target.result === 'string') {
-                setImages((prev) => [...prev, evt.target!.result as string]);
-              }
-            };
-            reader.readAsDataURL(file);
+            filesToProcess.push(file);
           }
         }
       }
 
-      if (pastedAny) {
+      if (filesToProcess.length > 0) {
         setPasteNotice(true);
         setTimeout(() => setPasteNotice(false), 2500);
+        processFiles(filesToProcess);
       }
     };
 
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [isOpen]);
+  }, [isOpen, processFiles]);
 
   // Drag & drop handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -165,8 +164,16 @@ export default function ImageUploadModal({
           {/* Paste Notification Banner */}
           {pasteNotice && (
             <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-sm animate-in slide-in-from-top duration-200">
-              <ClipboardCheck className="w-5 h-5 text-emerald-600" />
+              <ClipboardCheck className="w-5 h-5 text-emerald-600 shrink-0" />
               <span>Đã nhận và thêm ảnh từ Clipboard thành công!</span>
+            </div>
+          )}
+
+          {/* Compressing Notice */}
+          {isCompressing && (
+            <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-sm animate-pulse">
+              <Loader2 className="w-5 h-5 text-blue-600 animate-spin shrink-0" />
+              <span>Đang tự động tối ưu hóa và nén ảnh (WebP) để chống tràn bộ nhớ...</span>
             </div>
           )}
 

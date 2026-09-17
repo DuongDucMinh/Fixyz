@@ -1,0 +1,36 @@
+{
+  "name": "fixyz",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint src",
+    "test": "node scripts/test-scenarios.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "clsx": "^2.1.1",
+    "language-subtag-registry": "^0.4.2",
+    "lucide-react": "^1.46.0",
+    "next": "16.3.5",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwind-merge": "^3.7.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.6.1",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.5",
+    "hermes-parser": "^0.37.0",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^3.4.19",
+    "tsconfig-paths": "^3.15.0",
+    "typescript": "^5"
+  }
+}

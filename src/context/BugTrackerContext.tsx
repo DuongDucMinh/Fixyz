@@ -31,6 +31,7 @@ interface BugTrackerContextType {
     pendingCount: number;
     completedCount: number;
   };
+  isLoaded: boolean;
   isConnectedToSupabase: boolean;
   refreshFromSupabase: () => Promise<void>;
 }
@@ -45,10 +46,10 @@ const STORAGE_KEYS = {
 };
 
 export function BugTrackerProvider({ children }: { children: React.ReactNode }) {
-  const [topics, setTopics] = useState<Topic[]>(INITIAL_TOPICS);
-  const [activeTopicId, setActiveTopicId] = useState<string>(INITIAL_TOPICS[0].id);
-  const [assignees, setAssignees] = useState<Assignee[]>(INITIAL_ASSIGNEES);
-  const [bugs, setBugs] = useState<Bug[]>(INITIAL_BUGS);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [activeTopicId, setActiveTopicId] = useState<string>('');
+  const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [bugs, setBugs] = useState<Bug[]>([]);
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [isConnectedToSupabase, setIsConnectedToSupabase] = useState<boolean>(false);
 
@@ -70,22 +71,26 @@ export function BugTrackerProvider({ children }: { children: React.ReactNode }) 
 
       if (topicsRes.error) {
         console.error('[Fixyz] Supabase topics query error:', topicsRes.error);
-      } else if (topicsRes.data && topicsRes.data.length > 0) {
+      } else if (topicsRes.data) {
         setIsConnectedToSupabase(true);
-        const loadedTopics: Topic[] = (topicsRes.data as unknown as SupabaseTopicRow[]).map((t) => ({
-          id: t.id,
-          name: t.name,
-          createdAt: t.created_at,
-        }));
-        setTopics(loadedTopics);
+        if (topicsRes.data.length > 0) {
+          const loadedTopics: Topic[] = (topicsRes.data as unknown as SupabaseTopicRow[]).map((t) => ({
+            id: t.id,
+            name: t.name,
+            createdAt: t.created_at,
+          }));
+          setTopics(loadedTopics);
 
-        // Keep active topic if it still exists
-        setActiveTopicId((prev) =>
-          loadedTopics.some((t) => t.id === prev) ? prev : loadedTopics[0].id
-        );
+          // Keep active topic if it still exists, else switch to first topic
+          setActiveTopicId((prev) =>
+            prev && loadedTopics.some((t) => t.id === prev) ? prev : loadedTopics[0].id
+          );
+        }
       }
 
-      if (assigneesRes.data && assigneesRes.data.length > 0) {
+      if (assigneesRes.error) {
+        console.error('[Fixyz] Supabase assignees query error:', assigneesRes.error);
+      } else if (assigneesRes.data) {
         setAssignees(
           (assigneesRes.data as unknown as SupabaseAssigneeRow[]).map((a) => ({
             id: a.id,
@@ -95,7 +100,9 @@ export function BugTrackerProvider({ children }: { children: React.ReactNode }) 
         );
       }
 
-      if (bugsRes.data && bugsRes.data.length > 0) {
+      if (bugsRes.error) {
+        console.error('[Fixyz] Supabase bugs query error:', bugsRes.error);
+      } else if (bugsRes.data) {
         setBugs(
           (bugsRes.data as unknown as SupabaseBugRow[]).map((b) => ({
             id: b.id,
@@ -110,7 +117,6 @@ export function BugTrackerProvider({ children }: { children: React.ReactNode }) 
         );
       }
 
-
       console.log('[Fixyz] Successfully synced with Supabase!');
     } catch (err) {
       console.error('[Fixyz] Error loading data from Supabase:', err);
@@ -120,51 +126,57 @@ export function BugTrackerProvider({ children }: { children: React.ReactNode }) 
   // Initial load
   useEffect(() => {
     async function init() {
-      // 1. Try to load from Supabase
-      if (isSupabaseConfigured) {
-        await refreshFromSupabase();
-      }
+      let hasLocalCache = false;
 
-      // 2. If Supabase had no data or failed, try LocalStorage fallback
+      // 1. FIRST: Instantly restore from localStorage (0ms latency, synchronous)
       try {
         const savedTopics = localStorage.getItem(STORAGE_KEYS.TOPICS);
         const savedAssignees = localStorage.getItem(STORAGE_KEYS.ASSIGNEES);
         const savedBugs = localStorage.getItem(STORAGE_KEYS.BUGS);
         const savedActiveTopic = localStorage.getItem(STORAGE_KEYS.ACTIVE_TOPIC);
 
-        if (savedTopics && (!topics || topics.length === 0)) {
-          const parsed = JSON.parse(savedTopics);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setTopics(parsed);
-            if (savedActiveTopic && parsed.some((t: Topic) => t.id === savedActiveTopic)) {
-              setActiveTopicId(savedActiveTopic);
-            } else {
-              setActiveTopicId(parsed[0].id);
-            }
+        if (savedTopics) {
+          const parsedTopics = JSON.parse(savedTopics);
+          if (Array.isArray(parsedTopics) && parsedTopics.length > 0) {
+            setTopics(parsedTopics);
+            const activeId = savedActiveTopic && parsedTopics.some((t: Topic) => t.id === savedActiveTopic)
+              ? savedActiveTopic
+              : parsedTopics[0].id;
+            setActiveTopicId(activeId);
+            hasLocalCache = true;
           }
         }
 
-        if (savedAssignees && (!assignees || assignees.length === 0)) {
-          const parsed = JSON.parse(savedAssignees);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setAssignees(
-              parsed.map((a: Assignee) => ({
-                id: a.id,
-                name: a.name,
-                avatar: a.avatar || '',
-              }))
-            );
+        if (savedAssignees) {
+          const parsedAssignees = JSON.parse(savedAssignees);
+          if (Array.isArray(parsedAssignees)) {
+            setAssignees(parsedAssignees);
           }
         }
 
-        if (savedBugs && (!bugs || bugs.length === 0)) {
-          const parsed = JSON.parse(savedBugs);
-          if (Array.isArray(parsed)) {
-            setBugs(parsed);
+        if (savedBugs) {
+          const parsedBugs = JSON.parse(savedBugs);
+          if (Array.isArray(parsedBugs)) {
+            setBugs(parsedBugs);
           }
         }
       } catch (e) {
-        console.warn('Failed to load from localStorage', e);
+        console.warn('[Fixyz] Failed to restore from localStorage', e);
+      }
+
+      // 2. Fetch live data from Supabase if configured, or use demo fallback if completely offline & uninitialized
+      try {
+        if (isSupabaseConfigured) {
+          await refreshFromSupabase();
+        } else if (!hasLocalCache) {
+          // Demo fallback: only when Supabase is not configured AND no cache exists
+          setTopics(INITIAL_TOPICS);
+          setActiveTopicId(INITIAL_TOPICS[0].id);
+          setAssignees(INITIAL_ASSIGNEES);
+          setBugs(INITIAL_BUGS);
+        }
+      } catch (e) {
+        console.error('[Fixyz] Init load error:', e);
       } finally {
         setIsLoaded(true);
       }
@@ -433,6 +445,7 @@ export function BugTrackerProvider({ children }: { children: React.ReactNode }) 
         selectedAssigneeId,
         setSelectedAssigneeId,
         stats,
+        isLoaded,
         isConnectedToSupabase,
         refreshFromSupabase,
       }}

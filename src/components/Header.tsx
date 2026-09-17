@@ -6,7 +6,7 @@ import { FolderGit2, AlertCircle, CheckCircle2, Plus, ImagePlus } from 'lucide-r
 import ImageUploadModal from './ImageUploadModal';
 
 export default function Header() {
-  const { topics, activeTopicId, stats, addBug, addImageToBug } = useBugTracker();
+  const { topics, activeTopicId, stats, addBug, addImageToBug, isLoaded } = useBugTracker();
   const [quickUploadOpen, setQuickUploadOpen] = useState(false);
 
   const currentTopic = topics.find((t) => t.id === activeTopicId) || topics[0];
@@ -28,9 +28,13 @@ export default function Header() {
             <div className="w-8 h-8 rounded-lg bg-[#DCE9FF] text-[#0051D5] flex items-center justify-center shadow-2xs">
               <FolderGit2 className="w-4 h-4" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              {currentTopic?.name || 'Fix VLearn'}
-            </h1>
+            {!isLoaded && !currentTopic ? (
+              <div className="h-7 w-36 bg-slate-200/80 rounded animate-pulse" />
+            ) : (
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                {currentTopic?.name || 'Fixyz Projects'}
+              </h1>
+            )}
           </div>
 
           <div className="flex items-center gap-4 text-xs">

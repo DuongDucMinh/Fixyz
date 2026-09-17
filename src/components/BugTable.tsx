@@ -9,7 +9,7 @@ import ImageUploadModal from './ImageUploadModal';
 import { BugOff, Plus } from 'lucide-react';
 
 export default function BugTable() {
-  const { activeBugs, addBug, updateBug } = useBugTracker();
+  const { activeBugs, addBug, updateBug, isLoaded } = useBugTracker();
 
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -92,7 +92,38 @@ export default function BugTable() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {activeBugs.length === 0 ? (
+              {!isLoaded && activeBugs.length === 0 ? (
+                <>
+                  {[1, 2, 3].map((n) => (
+                    <tr key={`skeleton-${n}`} className="animate-pulse border-b border-slate-100 h-16">
+                      <td className="py-4 px-3 text-center">
+                        <div className="h-4 w-6 bg-slate-200 rounded mx-auto" />
+                      </td>
+                      <td className="py-4 px-2">
+                        <div className="h-10 w-16 bg-slate-200 rounded-lg" />
+                      </td>
+                      <td className="py-4 px-3">
+                        <div className="space-y-2">
+                          <div className="h-4 bg-slate-200 rounded w-4/5" />
+                          <div className="h-3 bg-slate-100 rounded w-2/5" />
+                        </div>
+                      </td>
+                      <td className="py-4 px-2.5">
+                        <div className="h-7 w-20 bg-slate-200 rounded-full" />
+                      </td>
+                      <td className="py-4 px-2.5">
+                        <div className="h-7 w-28 bg-slate-200 rounded-lg" />
+                      </td>
+                      <td className="py-4 px-2 text-center">
+                        <div className="h-5 w-5 bg-slate-200 rounded mx-auto" />
+                      </td>
+                      <td className="py-4 px-2 text-center">
+                        <div className="h-5 w-5 bg-slate-200 rounded mx-auto" />
+                      </td>
+                    </tr>
+                  ))}
+                </>
+              ) : activeBugs.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-16 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-3">

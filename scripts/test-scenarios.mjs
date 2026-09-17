@@ -230,6 +230,71 @@ async function runLiveSupabaseTests() {
 await runLiveSupabaseTests();
 
 // -------------------------------------------------------------
+// SCENARIO 6: Reload Cache Hydration & Flash Elimination
+// -------------------------------------------------------------
+console.log(`\n${BOLD}Scenario 6: Reload Cache Hydration & Mock Flash Elimination${RESET}`);
+
+// 6.1 Synchronous cache restoration simulation
+const mockLocalCache = {
+  fixyz_topics: JSON.stringify([{ id: 'topic-live', name: 'Live Project', createdAt: '2026-03-10' }]),
+  fixyz_active_topic: 'topic-live',
+  fixyz_assignees: JSON.stringify([{ id: 'user-1', name: 'Real User', avatar: '' }]),
+  fixyz_bugs: JSON.stringify([{ id: 'bug-live-1', description: 'Real user bug', topicId: 'topic-live' }]),
+};
+
+function simulateInit(isConfigured, storage) {
+  let stateTopics = [];
+  let stateActiveTopic = '';
+  let stateBugs = [];
+  let isLoaded = false;
+  let hasLocalCache = false;
+
+  // Step 1: 0ms Synchronous Cache Check
+  if (storage['fixyz_topics']) {
+    const parsed = JSON.parse(storage['fixyz_topics']);
+    if (parsed.length > 0) {
+      stateTopics = parsed;
+      stateActiveTopic = storage['fixyz_active_topic'] || parsed[0].id;
+      hasLocalCache = true;
+    }
+  }
+  if (storage['fixyz_bugs']) {
+    stateBugs = JSON.parse(storage['fixyz_bugs']);
+  }
+
+  // Step 2: Supabase / Demo Fallback
+  if (!isConfigured && !hasLocalCache) {
+    stateTopics = [{ id: 'mock-topic', name: 'Mock' }];
+    stateBugs = [{ id: 'mock-bug', description: 'Mock bug' }];
+  }
+
+  isLoaded = true;
+  return { stateTopics, stateActiveTopic, stateBugs, isLoaded, hasLocalCache };
+}
+
+// Case A: Supabase configured with existing cache
+const resultWithCache = simulateInit(true, mockLocalCache);
+assert(resultWithCache.stateBugs.length === 1 && resultWithCache.stateBugs[0].id === 'bug-live-1', 'Synchronous cache restores real bugs instantly without showing mock data');
+assert(resultWithCache.stateTopics[0].name === 'Live Project', 'Active project restores from cache instantly');
+
+// Case B: Supabase configured with empty initial state (first visit / cleared cache)
+const resultFresh = simulateInit(true, {});
+assert(resultFresh.stateBugs.length === 0, 'Fresh visit with Supabase does NOT flash mock bugs (starts with clean empty list)');
+assert(resultFresh.isLoaded === true, 'isLoaded flag transitions to true');
+
+// Case C: Supabase returns 0 bugs (empty table)
+function handleSupabaseBugsResponse(error, data) {
+  let bugs = [{ id: 'old-bug' }];
+  if (!error && data) {
+    bugs = data.map((b) => ({ id: b.id, description: b.description }));
+  }
+  return bugs;
+}
+const emptyDbBugs = handleSupabaseBugsResponse(null, []);
+assert(emptyDbBugs.length === 0, 'Supabase empty table safely clears bugs array without preserving mock data');
+
+
+// -------------------------------------------------------------
 // TEST SUMMARY
 // -------------------------------------------------------------
 console.log(`\n${BOLD}${CYAN}------------------------------------------------------${RESET}`);

@@ -7,7 +7,7 @@ import { useMounted } from '@/hooks/useMounted';
 import { Layers, Plus, X, FolderCheck } from 'lucide-react';
 
 export default function Sidebar() {
-  const { topics, activeTopicId, setActiveTopicId, addTopic } = useBugTracker();
+  const { topics, activeTopicId, setActiveTopicId, addTopic, isLoaded } = useBugTracker();
   const mounted = useMounted();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newTopicName, setNewTopicName] = useState('');
@@ -44,29 +44,36 @@ export default function Sidebar() {
           </div>
 
           {/* Topic Navigation */}
-          <nav className="space-y-1 mt-1">
-            {topics.map((topic) => {
-              const isActive = topic.id === activeTopicId;
-              return (
-                <button
-                  key={topic.id}
-                  onClick={() => setActiveTopicId(topic.id)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer text-left ${
-                    isActive
-                      ? 'bg-[#DCE9FF] text-[#0051D5] font-semibold shadow-2xs'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  <Layers
-                    className={`w-4 h-4 flex-shrink-0 ${
-                      isActive ? 'text-[#0051D5]' : 'text-slate-400'
+          {!isLoaded && topics.length === 0 ? (
+            <div className="space-y-1.5 mt-1 animate-pulse">
+              <div className="h-9 bg-slate-100 rounded-lg w-full" />
+              <div className="h-9 bg-slate-100 rounded-lg w-full" />
+            </div>
+          ) : (
+            <nav className="space-y-1 mt-1">
+              {topics.map((topic) => {
+                const isActive = topic.id === activeTopicId;
+                return (
+                  <button
+                    key={topic.id}
+                    onClick={() => setActiveTopicId(topic.id)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer text-left ${
+                      isActive
+                        ? 'bg-[#DCE9FF] text-[#0051D5] font-semibold shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                     }`}
-                  />
-                  <span className="truncate">{topic.name}</span>
-                </button>
-              );
-            })}
-          </nav>
+                  >
+                    <Layers
+                      className={`w-4 h-4 flex-shrink-0 ${
+                        isActive ? 'text-[#0051D5]' : 'text-slate-400'
+                      }`}
+                    />
+                    <span className="truncate">{topic.name}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          )}
 
           {/* Add Topic Button */}
           <button
